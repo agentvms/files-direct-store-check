@@ -163,7 +163,7 @@ export async function check() {
     note('start: explorer shell:AppsFolder\\' + pkg.family + '!FilesDirect exited ' + start.status + ' ' + start.err.slice(0, 300));
     const running = await until('the app to start', () => {
       const r = ps('Get-Process -Name FilesDirect -ErrorAction SilentlyContinue | ForEach-Object { $_.Id.ToString() + "|" + $_.Path }');
-      return r.out || null;
+      return r.out.split(/\r?\n/).find((line) => /\|.+/.test(line)) ?? null; // the process can exist a moment before Windows can tell where it runs from
     }, 60_000);
     note('process: ' + (running ?? '(none)'));
     ok(!!running && running.toLowerCase().includes(pkg.location.toLowerCase().replace(/\\$/, '')), 'the app started, from the installed package');
@@ -199,7 +199,7 @@ export async function check() {
     compileHandler(naive, join(WORK, 'naive-build'), { naive: true });
     const r0 = run(tester, [join(naive, HANDLER_FILE), list], { cwd: WORK, timeout: 60_000 });
     const careless = await seenBy('careless handler', nlog, 15_000);
-    ok(r0.status === 0 && !exactly(careless, files), 'the careless handler (the paths pasted into the command line) is broken by these names, as it should be: the check can fail (' + (careless ? 'the engine saw ' + careless.stdin.length + ' of ' + files.length + ' names' : 'the engine never started') + ')');
+    ok(r0.status === 0 && !exactly(careless, files), 'the careless handler (the paths pasted into the command line) is broken by these names, as it should be: the check can fail (' + (careless ? 'the engine saw ' + careless.stdin.length + ' names instead of ' + files.length : 'the engine never started') + ')');
     // 3b. as the installed package registered it: a package whose engine is the stand-in
     const rlog = join(WORK, 'seen-registered.json');
     const regBuild = await buildPackage({ stub: rlog, tag: 'registered' });
