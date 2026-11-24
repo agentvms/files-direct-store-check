@@ -20,7 +20,7 @@ const DESCRIPTION = 'Send files and folders straight from one device to another.
 const FORMS = {
   name: [/^[A-Za-z0-9][A-Za-z0-9.-]{2,49}$/, 'letters, digits, dots and dashes, 3 to 50 characters (the "Package/Identity/Name" value from Partner Center)'],
   publisher: [/^CN=[^"<>&]{1,200}$/, 'it starts with CN= (the "Package/Identity/Publisher" value from Partner Center)'],
-  publisherName: [/^[^\x00-\x1f]{1,100}$/, 'at most 100 characters (the "Package/Properties/PublisherDisplayName" value from Partner Center)'],
+  publisherName: [/^[^\n\r\t]{1,100}$/, 'at most 100 characters (the "Package/Properties/PublisherDisplayName" value from Partner Center)'],
 };
 
 /** The identity of the package: from the three settings when they are all set, from the placeholders when none is; a half-set identity is refused. */
@@ -120,7 +120,7 @@ const stubEngine = (log) => "import { writeFileSync } from 'node:fs'; const chun
  * so the check can follow a hostile name from the menu to the program that would send it; the check's package is otherwise the real one.
  */
 export async function buildPackage({ stub, tag = 'package' } = {}) {
-  const { TARGETS, buildEngine, compileLauncher, copyNative, fetchNode } = await import('./app-build.mjs');
+  const { buildEngine, compileLauncher, copyNative, fetchNode } = await import('./app-build.mjs');
   const { iconPng } = await import('./icon-png.mjs');
   const out = resolve(process.env.FD_STORE_OUT ?? 'store-out');
   const work = resolve(process.env.FD_STORE_WORK ?? join(process.env.RUNNER_TEMP ?? 'store-work', 'files-direct-store'));
