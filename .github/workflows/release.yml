@@ -1,0 +1,184 @@
+# Written by the export step of the private source repository; do not edit here.
+# A version tag (v1.2.3) builds the package on a GitHub-hosted runner, attaches it to a GitHub release, and then publishes that same file to npm
+# with npm trusted publishing: no npm token is stored anywhere. The publish is its own job, after the release, so when npm refuses (for example
+# before the package is linked to this workflow in its settings on npmjs.com) the release stays and only that job fails; link the package and re-run it.
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions: {}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.14.0'
+          cache: npm
+      - name: The tag is the package's version
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::The tag is $GITHUB_REF_NAME but package.json says $version."
+            exit 1
+          fi
+      - run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Unit tests
+        run: npm test
+      - name: The plugin folder's file rules
+        run: npm run check:plugin
+      - name: Make the package file
+        run: npm pack --ignore-scripts
+      - name: Attach it to a GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" files-direct-*.tgz --verify-tag --latest=false --title "files-direct ${GITHUB_REF_NAME#v}" --generate-notes
+
+  publish:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Trusted publishing needs Node 22.14 or later and npm 11.5.1 or later
+        run: |
+          npm install --global npm@11
+          node --version
+          npm --version
+          node -e 'const v = (s) => s.replace(/^v/, "").split(".").map(Number); const [a, b, c] = v(process.version); const [x, y, z] = v(process.argv[1]); process.exit((a > 22 || (a === 22 && b >= 14)) && (x > 11 || (x === 11 && (y > 5 || (y === 5 && z >= 1)))) ? 0 : 1)' "$(npm --version)"
+      - name: Take the package file from the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern 'files-direct-*.tgz'
+      - name: Publish to npm
+        run: |
+          if ! npm publish files-direct-*.tgz --provenance --access public; then
+            echo "::error title=npm did not publish::npm refused the publish. Until the package is linked to this workflow in its settings on npmjs.com (trusted publisher: this repository, workflow file release.yml) that is expected. The GitHub release is made and stays. Link the package, then re-run this job."
+            exit 1
+          fi
+
+  # The double-click app (files-direct-34): built on a machine of each system, then published with the signed list of updates. This does not hold up the npm publish above:
+  # when the signing key is not set, the desktop files are not published and this job says so in plain words; the release and the npm package stay as they are.
+  desktop-build:
+    needs: release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: mac-arm64
+          - os: macos-15-intel
+            target: mac-x64
+          - os: windows-2022
+            target: win-x64
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.14.0'
+          cache: npm
+      - run: npm ci
+      - name: Build the app and the files a person downloads
+        run: node scripts/app-build.mjs ${{ matrix.target }} build
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-${{ matrix.target }}
+          path: |
+            app-out/files-direct-*
+          if-no-files-found: error
+
+  desktop-publish:
+    needs: desktop-build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.14.0'
+          cache: npm
+      - name: The signing key must be set before anything is published
+        env:
+          FD_UPDATE_SIGNING_KEY: ${{ secrets.FD_UPDATE_SIGNING_KEY }}
+        run: |
+          if [ -z "$FD_UPDATE_SIGNING_KEY" ]; then
+            echo "::error title=Desktop files not published::The update signing key (the secret FD_UPDATE_SIGNING_KEY) is not set, so the desktop files were not published. The release and the npm package are not affected. Set the secret, then re-run this job."
+            exit 1
+          fi
+      - run: npm ci
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: desktop-*
+          path: desktop
+          merge-multiple: true
+      - name: Sign the files, if paid signing is set up (it is not yet, so the files stay as built)
+        run: node scripts/app-sign.mjs desktop
+      - name: Sign the list of updates with our own key
+        env:
+          FD_UPDATE_SIGNING_KEY: ${{ secrets.FD_UPDATE_SIGNING_KEY }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          node scripts/app-feed.mjs sign desktop "$version"
+      - name: Attach the files and the signed list to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" desktop/files-direct-* desktop/feed.json desktop/feed.json.sig --clobber
+          # only now is this the latest release: the site's list of updates is the latest release's, so the old one keeps working until the new one is complete
+          gh release edit "$GITHUB_REF_NAME" --latest
+
+  # The Microsoft Store package of the Windows app (files-direct-37): built like the desktop files, on a version tag, on a Windows machine. It is kept as a workflow artifact for whoever
+  # submits it to the Store (the Store signs what it lists and hands it to people from there); it is never attached to the release, never listed in the signed list of updates, never published
+  # to npm. The artifact is named store-msix, which the desktop publish job (it takes desktop-*) does not pick up. The package's publisher identity comes from three repository variables
+  # (docs/STORE.md); until they are set the package carries placeholders, which the Store would refuse, and the build says so.
+  store-build:
+    needs: release
+    runs-on: windows-2022
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.14.0'
+          cache: npm
+      - run: npm ci
+      - name: Build the Store package
+        env:
+          FD_STORE_IDENTITY_NAME: ${{ vars.FD_STORE_IDENTITY_NAME }}
+          FD_STORE_PUBLISHER: ${{ vars.FD_STORE_PUBLISHER }}
+          FD_STORE_PUBLISHER_NAME: ${{ vars.FD_STORE_PUBLISHER_NAME }}
+        run: node scripts/app-store.mjs build
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: store-msix
+          path: |
+            store-out/store-files-direct-*-x64.msix
+            store-out/build-store.json
+          if-no-files-found: error

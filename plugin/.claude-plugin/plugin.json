@@ -1,0 +1,34 @@
+{
+  "name": "files-direct",
+  "description": "Send files and folders to a person's phone or computer, or receive them, with no browser. It runs a small server on your machine, and files go straight to the other device.",
+  "version": "0.2.0",
+  "author": {
+    "name": "Files Direct"
+  },
+  "license": "MIT",
+  "keywords": [
+    "files",
+    "file-transfer",
+    "send-files",
+    "mcp",
+    "agent"
+  ],
+  "mcpServers": {
+    "files-direct": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "files-direct@0.2.0",
+        "mcp"
+      ]
+    }
+  },
+  "homepage": "https://files.tnyforge.com/agents",
+  "network": {
+    "hosts": [
+      "files.tnyforge.com",
+      "registry.npmjs.org",
+      "stun.cloudflare.com"
+    ]
+  }
+}

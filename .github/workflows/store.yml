@@ -1,0 +1,59 @@
+# Written by the export step of the private source repository; do not edit here.
+# The Microsoft Store package of the Windows app (files-direct-37), built and tried on GitHub's own Windows machines on every push: the package is made with the repository's three
+# identity settings (docs/STORE.md; placeholders when they are not set), signed with a test certificate made for the run and trusted on the runner only, checked by the Windows App
+# Certification Kit when the machine has it, installed, started, and its manifest and its registered menu handler looked at; then everything is removed again.
+# The Windows images are Windows Server, the closest hosted stand-in for a desktop, not one. Nothing here talks to the real site or to any account.
+name: store
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.14.0'
+          cache: npm
+      - run: npm ci
+      - name: What this machine has for building and checking a Store package
+        shell: pwsh
+        run: |
+          [System.Environment]::OSVersion.VersionString
+          Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Directory | Select-Object -ExpandProperty Name
+          Test-Path "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\appcert.exe"
+          & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property displayName
+      - name: Build the package (the app, the menu handler, the manifest)
+        env:
+          FD_STORE_IDENTITY_NAME: ${{ vars.FD_STORE_IDENTITY_NAME }}
+          FD_STORE_PUBLISHER: ${{ vars.FD_STORE_PUBLISHER }}
+          FD_STORE_PUBLISHER_NAME: ${{ vars.FD_STORE_PUBLISHER_NAME }}
+        run: node scripts/app-store.mjs build
+      - name: Certification, install with a test certificate, start, the menu entry in the manifest, a hostile name through the menu handler, remove
+        if: ${{ !cancelled() }}
+        env:
+          FD_STORE_IDENTITY_NAME: ${{ vars.FD_STORE_IDENTITY_NAME }}
+          FD_STORE_PUBLISHER: ${{ vars.FD_STORE_PUBLISHER }}
+          FD_STORE_PUBLISHER_NAME: ${{ vars.FD_STORE_PUBLISHER_NAME }}
+        run: node scripts/app-store.mjs check
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: store-${{ matrix.os }}
+          path: |
+            store-check
+            store-out/build-store.json
+            store-out/store-files-direct-*-x64.msix
+          if-no-files-found: ignore

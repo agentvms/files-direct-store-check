@@ -1,0 +1,4 @@
+LIBRARY SendWithFilesDirect
+EXPORTS
+    DllGetClassObject PRIVATE
+    DllCanUnloadNow PRIVATE

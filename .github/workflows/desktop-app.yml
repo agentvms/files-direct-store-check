@@ -1,0 +1,113 @@
+# Written by the export step of the private source repository; do not edit here.
+# The Files Direct app for a Mac and for Windows (files-direct-34), built on GitHub's own machines of each system. The size job measures what a download would weigh;
+# the app jobs build the app, install it for the runner's user only (no administrator), check it, update it from a stand-in feed signed with a key made for the run, and remove
+# it again, comparing a listing of every place it could leave something before and after. The programs are given a stand-in room service: nothing here talks to the real site.
+# The Windows images are Windows Server (2022 is built like Windows 10 and 11 desktops, 2025 like the newest one); they are the closest hosted stand-in for a desktop, not one.
+# The Mac machines have a login session but nobody at the screen: a double-click, the "Open Anyway" button and the menu bar itself are not seen here.
+name: desktop-app
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  size:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: mac-arm64
+          - os: macos-15-intel
+            target: mac-x64
+          - os: windows-2022
+            target: win-x64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.14.0'
+          cache: npm
+      - run: npm ci
+      - name: Measure the bare app (the program's engine, Node and the native file) in every way it could be packed
+        run: node scripts/app-build.mjs ${{ matrix.target }} size
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: app-sizes-${{ matrix.target }}
+          path: app-sizes-*.json
+          if-no-files-found: ignore
+
+  mac:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: mac-arm64
+          - os: macos-15-intel
+            target: mac-x64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.14.0'
+          cache: npm
+      - run: npm ci
+      - name: Build the app and the files a person downloads
+        run: node scripts/app-build.mjs ${{ matrix.target }} build
+      - name: Download, open, run, send two files and a folder, a hostile name through the Quick Action, Remove
+        run: node scripts/app-check.mjs mac-app
+      - name: Update from a stand-in feed (a newer build is installed; a changed, wrongly signed, older or longer one is refused), then Remove
+        run: node scripts/app-check.mjs mac-update
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: app-${{ matrix.target }}
+          path: |
+            desktop-shots
+            app-out/build-*.json
+          if-no-files-found: ignore
+
+  windows:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.14.0'
+          cache: npm
+      - run: npm ci
+      - name: Build the app, the installer and the launcher
+        run: node scripts/app-build.mjs win-x64 build
+      - name: A hostile name through the launcher (the careless launcher breaks, the real one does not)
+        run: node scripts/app-check.mjs win-hostile
+      - name: Install with no administrator, the tray program, the entries, send two files and a folder, uninstall leaves nothing
+        if: ${{ !cancelled() }}
+        run: node scripts/app-check.mjs win-app
+      - name: Update from a stand-in feed (a newer build is installed; a changed, wrongly signed or older one is refused), then uninstall
+        if: ${{ !cancelled() }}
+        run: node scripts/app-check.mjs win-update
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: app-${{ matrix.os }}
+          path: |
+            desktop-shots
+            app-out/build-*.json
+          if-no-files-found: ignore

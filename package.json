@@ -1,0 +1,53 @@
+{
+  "name": "files-direct",
+  "version": "0.2.0",
+  "description": "Send and receive files and folders with Files Direct from a terminal or an AI agent, with no browser. Also runs as a local MCP server.",
+  "mcpName": "com.tnyforge/files-direct",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agentvms/files-direct-cli"
+  },
+  "homepage": "https://files.tnyforge.com/agents",
+  "bugs": {
+    "url": "https://github.com/agentvms/files-direct-cli/issues"
+  },
+  "bin": {
+    "files-direct": "dist/files-direct.mjs"
+  },
+  "files": [
+    "dist/files-direct.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "keywords": [
+    "files",
+    "file-transfer",
+    "mcp",
+    "agent",
+    "cli"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "vitest run",
+    "check:plugin": "node scripts/check-plugin.mjs",
+    "check:pack": "node scripts/check-pack.mjs",
+    "check": "npm run build && npm test && npm run check:plugin && npm run check:pack",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "node-datachannel": "0.33.6",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "vitest": "^4.1.12",
+    "qrcode-generator": "2.0.4",
+    "playwright-core": "1.56.1"
+  }
+}

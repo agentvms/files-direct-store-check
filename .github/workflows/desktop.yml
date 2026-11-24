@@ -1,0 +1,78 @@
+# Written by the export step of the private source repository; do not edit here.
+# The right-click menu and the window, on GitHub's own macOS and Windows machines (files-direct-30). The program is installed for the runner's user only, with no
+# administrator; its menu entry is added, checked and removed; a name made to run something is sent through the installed entry and must arrive as one argument; the
+# window's page is opened in a real browser and shows the link, the QR code and the code. Nothing here talks to the real site: the program is given a stand-in room service.
+# The Windows images are Windows Server (2022 is built like Windows 10 and 11 desktops, 2025 like the newest one); they are the closest hosted stand-in for a desktop, not one.
+name: desktop
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.14.0'
+          cache: npm
+      - run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Install the package file for this user only, with no administrator
+        run: node scripts/desktop-check.mjs install
+      - name: A hostile name goes through the installed Quick Action as one argument
+        run: node scripts/desktop-check.mjs entry
+      - name: menu install, the Services list, menu remove leaves nothing
+        run: node scripts/desktop-check.mjs menu
+      - name: The window shows the link, the QR code and the code, and Cancel sends nothing
+        run: node scripts/desktop-check.mjs window
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: desktop-shots-mac
+          path: desktop-shots
+          if-no-files-found: ignore
+
+  windows:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.14.0'
+          cache: npm
+      - run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Install the package file for this user only, with no administrator
+        run: node scripts/desktop-check.mjs install
+      - name: A hostile name goes through the installed registry entry and Send to as one argument
+        run: node scripts/desktop-check.mjs entry
+      - name: menu install, the registry keys and the Send to shortcut, menu remove leaves nothing
+        run: node scripts/desktop-check.mjs menu
+      - name: The window shows the link, the QR code and the code, and Cancel sends nothing
+        run: node scripts/desktop-check.mjs window
+      - name: Several files chosen in one right-click end up in one room
+        run: node scripts/desktop-check.mjs gather
+      - name: The installed registry entry starts the window without a console left on screen, and closing the window ends the run
+        run: node scripts/desktop-check.mjs detach
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: desktop-shots-${{ matrix.os }}
+          path: desktop-shots
+          if-no-files-found: ignore
