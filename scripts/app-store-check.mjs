@@ -24,7 +24,9 @@ const psq = (s) => "'" + String(s).replace(/'/g, "''") + "'";
 /** PowerShell, given the script encoded so that no quoting of ours reaches it. */
 function ps(script, o = {}) {
   const encoded = Buffer.from('$ErrorActionPreference = "Stop"; $ProgressPreference = "SilentlyContinue"; ' + script, 'utf16le').toString('base64');
-  const r = run('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded], o);
+  // Windows PowerShell (the one with the certificate and package commands) must not inherit the module path of the newer PowerShell that runs the workflow's steps
+  const env = { ...process.env, PSModulePath: join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'Modules') };
+  const r = run('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-OutputFormat', 'Text', '-EncodedCommand', encoded], { env, ...o });
   return { status: r.status, out: (r.stdout ?? '').trim(), err: (r.stderr ?? '').trim() };
 }
 async function until(what, fn, ms = 30_000) {
