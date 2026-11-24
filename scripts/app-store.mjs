@@ -1,7 +1,7 @@
 // The Files Direct Store package for Windows (files-direct-37): the app of scripts/app-build.mjs as an MSIX, plus the handler of the Windows 11 main right-click menu.
 //   node scripts/app-store.mjs build     builds the app, the handler and the package: store-out/<name>.msix, unsigned (the Store signs what it lists)
-//   node scripts/app-store.mjs check     what the build machine can show of it: a test-signed copy installs, the app starts, the manifest holds the menu entry, the handler
-//                                        passes hostile names on, the certification kit's verdict (or the closest check there is, named), and the package is removed again
+//   node scripts/app-store-check.mjs     (its own file) what the build machine can show of it: a test-signed copy installs, the app starts, the manifest holds the menu entry,
+//                                        the handler passes hostile names on, the certification kit's verdict (or the closest check there is, named), and the package is removed again
 // The three values that name the publisher come from build-time settings (repository variables, below); with none set the package carries clear placeholders and says so.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -106,6 +106,7 @@ export function compileHandler(into, work) {
   const obj = slashes(work) + '/';
   const dll = join(into, HANDLER_FILE);
   withCompiler('cl /nologo /std:c++17 /O2 /EHsc /MT /W3 /guard:cf /LD /Fo"' + obj + '" /Fe"' + slashes(dll) + '" "' + src + '/ExplorerCommand.cpp" /link /DEF:"' + src + '/ExplorerCommand.def" /guard:cf /DYNAMICBASE /NXCOMPAT ole32.lib shell32.lib shlwapi.lib user32.lib');
+  for (const leftover of ['.lib', '.exp']) rmSync(dll.replace(/\.dll$/, leftover), { force: true }); // the linker's import library is not part of the package
   const test = join(work, 'InvokeTest.exe');
   withCompiler('cl /nologo /std:c++17 /O2 /EHsc /MT /W3 /Fo"' + obj + '" /Fe"' + slashes(test) + '" "' + src + '/InvokeTest.cpp" /link ole32.lib shell32.lib');
   return { dll, test };
@@ -160,9 +161,8 @@ if (typeof process !== 'undefined' && process.argv?.[1] && import.meta.url === n
   try {
     if (!WIN) throw new Error('the Store package is built on Windows (the build machine of the release workflow)');
     if (mode === 'build') await buildPackage();
-    else if (mode === 'check') await (await import('./app-store-check.mjs')).check();
     else {
-      console.error('usage: node scripts/app-store.mjs <build | check>');
+      console.error('usage: node scripts/app-store.mjs build   (the check is its own program: node scripts/app-store-check.mjs)');
       process.exit(2);
     }
   } catch (e) {

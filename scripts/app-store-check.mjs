@@ -1,4 +1,4 @@
-// What a Windows build machine can show of the Store package (files-direct-37): node scripts/app-store.mjs check, after a build.
+// What a Windows build machine can show of the Store package (files-direct-37): node scripts/app-store-check.mjs, after node scripts/app-store.mjs build.
 // Everything it installs it removes again, and the test certificate it makes is trusted on this machine only for the length of the run. Nothing here talks to the real site or to any account:
 // the one program that is started with a hostile name is a stand-in engine that only writes down what it was given.
 //   1. the certification kit's verdict on the package (the Windows App Certification Kit when the machine has it; else the closest check there is, named)
@@ -200,6 +200,15 @@ export async function check() {
   }
   if (problems.length) {
     console.log('\n' + problems.length + ' check(s) failed:\n- ' + problems.join('\n- '));
+    process.exit(1);
+  }
+}
+
+if (typeof process !== 'undefined' && process.argv?.[1] && import.meta.url === new URL('file://' + (process.platform === 'win32' ? '/' : '') + process.argv[1].replace(/\\/g, '/')).href) {
+  try {
+    await check();
+  } catch (e) {
+    console.error(String(e?.stack ?? e));
     process.exit(1);
   }
 }
