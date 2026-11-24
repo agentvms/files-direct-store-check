@@ -186,14 +186,14 @@ function makeDmg(app, out, work) {
 const frameworkCsc = () => join(process.env.windir ?? 'C:\\Windows', 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe');
 
 /** Compiles the tray and launcher program with the compiler that is in every Windows (C# 5, .NET Framework 4). */
-export function compileLauncher(out, work, version, naive = false) {
+export function compileLauncher(out, work, version, naive = false, manifest = null) {
   mkdirSync(work, { recursive: true });
   const ico = join(work, 'app.ico');
   writeFileSync(ico, iconIco());
   const v = version.split('.').concat(['0']).slice(0, 4).join('.');
   const info = join(work, 'AssemblyInfo.cs');
   writeFileSync(info, 'using System.Reflection;\n[assembly: AssemblyTitle("Files Direct")]\n[assembly: AssemblyProduct("Files Direct")]\n[assembly: AssemblyVersion("' + v + '")]\n[assembly: AssemblyFileVersion("' + v + '")]\n[assembly: AssemblyInformationalVersion("' + version + '")]\n');
-  const args = ['/nologo', '/target:winexe', '/platform:x64', '/optimize+', '/out:' + out, '/win32icon:' + ico, '/r:System.dll', '/r:System.Windows.Forms.dll', '/r:System.Drawing.dll', '/r:System.Web.Extensions.dll', ...(naive ? ['/define:FD_NAIVE'] : []), join('app', 'win', 'FilesDirect.cs'), info];
+  const args = ['/nologo', '/target:winexe', '/platform:x64', '/optimize+', '/out:' + out, '/win32icon:' + ico, '/r:System.dll', '/r:System.Windows.Forms.dll', '/r:System.Drawing.dll', '/r:System.Web.Extensions.dll', ...(naive ? ['/define:FD_NAIVE'] : []), ...(manifest ? ['/win32manifest:' + manifest] : []), join('app', 'win', 'FilesDirect.cs'), info];
   console.log('csc ' + args.join(' '));
   sh(frameworkCsc(), args);
   return ico;

@@ -100,8 +100,10 @@ function certification(msix) {
     note('appcert test exited ' + r.status + (r.error ? ' (' + r.error + ')' : '') + '\n' + String(r.stdout).split(/\r?\n/).filter(Boolean).slice(-12).join('\n'));
     const xml = existsSync(report) ? readFileSync(report, 'utf8') : '';
     const overall = /OVERALL_RESULT="([^"]*)"/.exec(xml)?.[1];
-    const fails = [...xml.matchAll(/<TEST [^>]*?NAME="([^"]*)"[^>]*?RESULT="(FAIL)"/g)].map((m) => m[1]);
-    note('certification kit verdict: OVERALL_RESULT=' + (overall ?? '(no report)') + (fails.length ? '; failed tests: ' + fails.join(', ') : ''));
+    const tests = [...xml.matchAll(/<TEST [^>]*?NAME="([^"]*)"[^>]*?OPTIONAL="(TRUE|FALSE)"[^>]*>([\s\S]*?)<\/TEST>/g)].map((m) => ({ name: m[1], optional: m[2] === 'TRUE', result: /<RESULT><!\[CDATA\[(\w+)\]\]>/.exec(m[3])?.[1] ?? '?', messages: [...m[3].matchAll(/<MESSAGE TEXT="([^"]*)"/g)].map((x) => x[1]) }));
+    const count = (r) => tests.filter((t) => t.result === r).length;
+    note('certification kit verdict: OVERALL_RESULT=' + (overall ?? '(no report)') + ' over ' + tests.length + ' tests: ' + count('PASS') + ' pass, ' + count('WARNING') + ' warning, ' + count('FAIL') + ' fail');
+    for (const t of tests.filter((x) => x.result !== 'PASS')) note((t.optional ? 'optional test ' : 'REQUIRED test ') + '"' + t.name + '": ' + t.result + (t.messages.length ? '\n' + t.messages.slice(0, 4).join('\n') : ''));
     ok(overall === 'PASS', 'the Windows App Certification Kit passes the package (OVERALL_RESULT=' + (overall ?? 'none') + ')');
     return 'appcert';
   }

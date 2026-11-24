@@ -141,7 +141,7 @@ export async function buildPackage({ stub, tag = 'package' } = {}) {
   }
   writeFileSync(join(layout, 'app.json'), JSON.stringify({ target: 'win-x64', version }) + '\n');
   copyNative('win-x64', layout);
-  compileLauncher(join(layout, LAUNCHER_FILE), join(work, 'launcher-' + tag), version);
+  compileLauncher(join(layout, LAUNCHER_FILE), join(work, 'launcher-' + tag), version, false, resolve('app', 'store', 'FilesDirect.exe.manifest'));
   compileHandler(layout, join(work, 'handler-' + tag));
   for (const [file, px] of [['StoreLogo', 50], ['Square44x44Logo', 44], ['Square150x150Logo', 150]]) writeFileSync(join(layout, 'Assets', file + '.png'), iconPng(px, { samples: 4 }));
   writeFileSync(join(layout, 'AppxManifest.xml'), renderManifest(settings, version));
