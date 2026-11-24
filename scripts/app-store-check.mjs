@@ -147,7 +147,7 @@ export async function check() {
     // ---- 2. install, manifest, registration, start ----
     ok(!installed(settings.name), 'the package is not installed before the check');
     const add = ps('Add-AppxPackage -Path ' + psq(signed));
-    if (!ok(add.status === 0, 'Add-AppxPackage installs the test-signed package' + (add.status === 0 ? '' : ': ' + add.err.slice(0, 600)))) return;
+    if (!ok(add.status === 0, 'Add-AppxPackage installs the test-signed package' + (add.status === 0 ? '' : ': ' + add.err.slice(0, 600)))) throw new Error('The test package could not be installed, so the rest of the check cannot run' + (problems.length > 1 ? '. Earlier failures:\n- ' + problems.slice(0, -1).join('\n- ') : ''));
     const pkg = installed(settings.name);
     ok(!!pkg, 'Windows lists the package: ' + JSON.stringify(pkg));
     const manifest = ps('(Get-AppxPackageManifest -Package ' + psq(pkg.full) + ').OuterXml').out;

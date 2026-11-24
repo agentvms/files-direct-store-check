@@ -45,6 +45,34 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release create "$GITHUB_REF_NAME" files-direct-*.tgz --verify-tag --latest=false --title "files-direct ${GITHUB_REF_NAME#v}" --generate-notes
 
+  publish:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Trusted publishing needs Node 22.14 or later and npm 11.5.1 or later
+        run: |
+          npm install --global npm@11
+          node --version
+          npm --version
+          node -e 'const v = (s) => s.replace(/^v/, "").split(".").map(Number); const [a, b, c] = v(process.version); const [x, y, z] = v(process.argv[1]); process.exit((a > 22 || (a === 22 && b >= 14)) && (x > 11 || (x === 11 && (y > 5 || (y === 5 && z >= 1)))) ? 0 : 1)' "$(npm --version)"
+      - name: Take the package file from the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern 'files-direct-*.tgz'
+      - name: Publish to npm
+        run: |
+          if ! npm publish files-direct-*.tgz --provenance --access public; then
+            echo "::error title=npm did not publish::npm refused the publish. Until the package is linked to this workflow in its settings on npmjs.com (trusted publisher: this repository, workflow file release.yml) that is expected. The GitHub release is made and stays. Link the package, then re-run this job."
+            exit 1
+          fi
+
   # The double-click app (files-direct-34): built on a machine of each system, then published with the signed list of updates. This does not hold up the npm publish above:
   # when the signing key is not set, the desktop files are not published and this job says so in plain words; the release and the npm package stay as they are.
   desktop-build:
