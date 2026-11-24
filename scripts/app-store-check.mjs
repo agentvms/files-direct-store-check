@@ -7,7 +7,7 @@
 import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { HANDLER_CLSID, HANDLER_FILE, LAUNCHER_FILE, buildPackage, kitTool, storeSettings } from './app-store.mjs';
+import { HANDLER_CLSID, HANDLER_FILE, LAUNCHER_FILE, buildPackage, compileHandler, kitTool, storeSettings } from './app-store.mjs';
 
 const OUT = resolve(process.env.FD_STORE_OUT ?? 'store-out');
 const SHOTS = resolve('store-check');
@@ -52,9 +52,14 @@ function hostileFiles(dir) {
 }
 
 /** Waits for the stand-in engine's note and compares it to what the menu should have handed on. */
+async function seenBy(what, log, ms = 40_000) {
+  return JSON.parse((await until('the stand-in engine (' + what + ')', () => existsSync(log) && readFileSync(log, 'utf8'), ms)) ?? 'null');
+}
+const exactly = (seen, files) => !!seen && JSON.stringify(seen.argv) === JSON.stringify(['open', '--app', '--paths-stdin']) && JSON.stringify(seen.stdin) === JSON.stringify(files);
+
 async function expectHandedOn(what, log, files, home) {
-  const seen = JSON.parse((await until('the stand-in engine (' + what + ')', () => existsSync(log) && readFileSync(log, 'utf8'), 40_000)) ?? 'null');
-  const same = seen && JSON.stringify(seen.argv) === JSON.stringify(['open', '--app', '--paths-stdin']) && JSON.stringify(seen.stdin) === JSON.stringify(files);
+  const seen = await seenBy(what, log);
+  const same = exactly(seen, files);
   if (!same) note(what + ': the engine saw ' + JSON.stringify(seen)?.slice(0, 1500));
   ok(same, what + ': the engine was started with exactly "open --app --paths-stdin" and all ' + files.length + ' names, in order, on its standard input, none on a command line');
   ok(!existsSync(join(home, 'pwned.txt')) && !files.some((f) => existsSync(join(f, '..', 'pwned'))) && !existsSync(join(process.cwd(), 'pwned.txt')), what + ': nothing else ran (no file called pwned)');
@@ -184,6 +189,17 @@ export async function check() {
     note('InvokeTest (library file): exit ' + r1.status + '\n' + String(r1.stdout + r1.stderr).trim());
     ok(r1.status === 0 && /title: Send with Files Direct/.test(r1.stdout), 'the handler answers with its title "Send with Files Direct" and runs Invoke');
     await expectHandedOn('handler as a plain file', dlog, files, WORK);
+    // 3a'. the careless form of the handler (the paths pasted into a command line) must be broken by the same names: the check can fail
+    const naive = join(WORK, 'naive App');
+    rmSync(naive, { recursive: true, force: true });
+    mkdirSync(naive, { recursive: true });
+    const nlog = join(WORK, 'seen-naive.json');
+    for (const f of [LAUNCHER_FILE, 'node.exe']) cpSync(join(stubBuild.layout, f), join(naive, f));
+    writeFileSync(join(naive, 'files-direct.mjs'), readFileSync(join(stubBuild.layout, 'files-direct.mjs'), 'utf8').split(JSON.stringify(dlog)).join(JSON.stringify(nlog)));
+    compileHandler(naive, join(WORK, 'naive-build'), { naive: true });
+    const r0 = run(tester, [join(naive, HANDLER_FILE), list], { cwd: WORK, timeout: 60_000 });
+    const careless = await seenBy('careless handler', nlog, 15_000);
+    ok(r0.status === 0 && !exactly(careless, files), 'the careless handler (the paths pasted into the command line) is broken by these names, as it should be: the check can fail (' + (careless ? 'the engine saw ' + careless.stdin.length + ' of ' + files.length + ' names' : 'the engine never started') + ')');
     // 3b. as the installed package registered it: a package whose engine is the stand-in
     const rlog = join(WORK, 'seen-registered.json');
     const regBuild = await buildPackage({ stub: rlog, tag: 'registered' });

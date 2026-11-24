@@ -4,6 +4,8 @@
 // It holds no rule of its own. Invoke starts the launcher that sits beside this library (the same program as the tray program of the installed app) with one fixed word,
 // "paths-stdin", and writes the chosen paths to the launcher's standard input, each ended by a NUL byte (a path cannot hold one). A path is NEVER put into a command line,
 // so a name made of quotes, spaces, "&", "%" or "^" is only ever a name. Built by scripts/app-store.mjs with the C++ compiler that is on the build machine.
+// Built with FD_NAIVE defined it does the careless thing instead (the paths pasted into the command line, unquoted): the check uses that build to show that a hostile name
+// breaks it, so that the real build passing means something. That build is never part of the package.
 #define WIN32_LEAN_AND_MEAN
 #define UNICODE
 #define _UNICODE
@@ -27,6 +29,27 @@ static std::wstring OwnFolder() {
     return slash == std::wstring::npos ? L"" : path.substr(0, slash + 1);
 }
 
+#ifdef FD_NAIVE
+/** The careless form, for the check only: every path after the word, in a command line. */
+static std::wstring NaivePaths(IShellItemArray* items) {
+    std::wstring all;
+    DWORD count = 0;
+    items->GetCount(&count);
+    for (DWORD i = 0; i < count; i++) {
+        IShellItem* item = nullptr;
+        if (FAILED(items->GetItemAt(i, &item))) continue;
+        PWSTR path = nullptr;
+        if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)) && path) {
+            all += L" ";
+            all += path;
+            CoTaskMemFree(path);
+        }
+        item->Release();
+    }
+    return all;
+}
+#endif
+
 /** Starts the launcher with its standard input connected to a pipe, and writes the paths to it. Returns false when the launcher could not be started. */
 static bool HandOver(const std::wstring& launcher, const std::wstring& folder, IShellItemArray* items) {
     SECURITY_ATTRIBUTES inherit = { sizeof(inherit), nullptr, TRUE };
@@ -36,7 +59,11 @@ static bool HandOver(const std::wstring& launcher, const std::wstring& folder, I
     HANDLE nul = CreateFileW(L"NUL", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &inherit, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
 
     // the one command line: the launcher's own path in quotes, and one fixed word
+#ifdef FD_NAIVE
+    std::wstring command = L"\"" + launcher + L"\" sendto" + NaivePaths(items);
+#else
     std::wstring command = L"\"" + launcher + L"\" " L"paths-stdin";
+#endif
     STARTUPINFOW start = { sizeof(start) };
     start.dwFlags = STARTF_USESTDHANDLES;
     start.hStdInput = readEnd;
@@ -53,6 +80,10 @@ static bool HandOver(const std::wstring& launcher, const std::wstring& folder, I
     CloseHandle(child.hThread);
     CloseHandle(child.hProcess);
 
+#ifdef FD_NAIVE
+    CloseHandle(writeEnd);
+    return true;
+#endif
     DWORD count = 0;
     items->GetCount(&count);
     for (DWORD i = 0; i < count; i++) {

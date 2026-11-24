@@ -100,12 +100,12 @@ function withCompiler(line) {
 }
 
 /** The handler's library, and (for the check only) the program that calls it the way Explorer does. Both with the C runtime inside, so the package needs nothing installed beside it. */
-export function compileHandler(into, work) {
+export function compileHandler(into, work, { naive = false } = {}) {
   const src = slashes(resolve('app', 'store'));
   mkdirSync(work, { recursive: true });
   const obj = slashes(work) + '/';
   const dll = join(into, HANDLER_FILE);
-  withCompiler('cl /nologo /std:c++17 /O2 /EHsc /MT /W3 /guard:cf /LD /Fo"' + obj + '" /Fe"' + slashes(dll) + '" "' + src + '/ExplorerCommand.cpp" /link /DEF:"' + src + '/ExplorerCommand.def" /guard:cf /DYNAMICBASE /NXCOMPAT ole32.lib shell32.lib shlwapi.lib user32.lib');
+  withCompiler('cl /nologo /std:c++17 /O2 /EHsc /MT /W3 /guard:cf' + (naive ? ' /DFD_NAIVE' : '') + ' /LD /Fo"' + obj + '" /Fe"' + slashes(dll) + '" "' + src + '/ExplorerCommand.cpp" /link /DEF:"' + src + '/ExplorerCommand.def" /guard:cf /DYNAMICBASE /NXCOMPAT ole32.lib shell32.lib shlwapi.lib user32.lib');
   for (const leftover of ['.lib', '.exp']) rmSync(dll.replace(/\.dll$/, leftover), { force: true }); // the linker's import library is not part of the package
   const test = join(work, 'InvokeTest.exe');
   withCompiler('cl /nologo /std:c++17 /O2 /EHsc /MT /W3 /Fo"' + obj + '" /Fe"' + slashes(test) + '" "' + src + '/InvokeTest.cpp" /link ole32.lib shell32.lib');
